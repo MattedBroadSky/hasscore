@@ -7,7 +7,7 @@ from functools import cached_property
 import logging
 from typing import Any
 
-from doorbirdpy import DoorBird, DoorBirdScheduleEntry
+from doorbirdpy import DoorBird
 
 from homeassistant.const import ATTR_ENTITY_ID
 from homeassistant.core import HomeAssistant
@@ -95,9 +95,9 @@ class ConfiguredDoorBird:
                     "Successfully registered URL for %s on %s", event, self.name
                 )
 
-        schedule: list[DoorBirdScheduleEntry] = await self.device.schedule()
-        http_fav: dict[str, dict[str, Any]] = favorites.get("http") or {}
-        favorite_input_type: dict[str, str] = {
+        schedule = await self.device.schedule()
+        http_fav = await self._async_http_favorites(favorites)
+        favorite_input_type = {
             output.param: entry.input
             for entry in schedule
             for output in entry.output
@@ -113,6 +113,14 @@ class ConfiguredDoorBird:
                 events.append(DoorbirdEvent(event, input_type))
 
         self.event_descriptions = events
+
+    async def _async_http_favorites(
+        self, favs: dict[str, dict[str, Any]] | None
+    ) -> dict[str, dict[str, Any]]:
+        """Return the HTTP favorites."""
+        favs = favs if favs else await self.device.favorites()
+        http_fav: dict[str, dict[str, Any]] = favs.get("http") or {}
+        return http_fav
 
     @cached_property
     def slug(self) -> str:
@@ -155,8 +163,7 @@ class ConfiguredDoorBird:
 
         The favorite must exist or there will be problems.
         """
-        favs = favs if favs else await self.device.favorites()
-        http_fav: dict[str, dict[str, Any]] = favs.get("http") or {}
+        http_fav = await self._async_http_favorites(favs)
         for fav_id, data in http_fav.items():
             if data["value"] == url:
                 return fav_id
@@ -179,7 +186,7 @@ async def async_reset_device_favorites(
 ) -> None:
     """Handle clearing favorites on device."""
     door_bird = door_station.device
-    favorites: dict[str, dict[str, Any]] = await door_bird.favorites()
+    favorites = await door_bird.favorites()
     for favorite_type, favorite_ids in favorites.items():
         for favorite_id in favorite_ids:
             await door_bird.delete_favorite(favorite_type, favorite_id)
